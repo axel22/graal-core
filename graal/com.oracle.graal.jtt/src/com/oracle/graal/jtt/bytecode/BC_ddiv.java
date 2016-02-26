@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,27 +20,20 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
 package com.oracle.graal.jtt.bytecode;
 
 import org.junit.Test;
 
-import com.oracle.graal.jtt.JTTTest;
-
-/*
- */
-public class BC_ddiv extends JTTTest {
+public class BC_ddiv extends BC_ddiv_drem_base {
 
     public static double test(double a, double b) {
         return a / b;
     }
 
     @Test
-    public void run0() throws Throwable {
-        runTest("test", 311.0D, 10D);
+    public void ddiv() {
+        runTest("test", x, y);
     }
 
-    @Test
-    public void run1() throws Throwable {
-        runTest("test", 311.0D, 0D);
-    }
 }

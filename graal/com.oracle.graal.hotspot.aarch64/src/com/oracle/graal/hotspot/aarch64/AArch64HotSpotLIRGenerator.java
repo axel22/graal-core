@@ -23,39 +23,59 @@
 
 package com.oracle.graal.hotspot.aarch64;
 
+import static com.oracle.graal.lir.LIRValueUtil.asConstant;
+import static com.oracle.graal.lir.LIRValueUtil.isConstantValue;
+
+import java.util.function.Function;
+
+import com.oracle.graal.asm.Label;
 import com.oracle.graal.asm.NumUtil;
 import com.oracle.graal.asm.aarch64.AArch64Address.AddressingMode;
+import com.oracle.graal.asm.aarch64.AArch64Assembler.ConditionFlag;
 import com.oracle.graal.compiler.aarch64.AArch64ArithmeticLIRGenerator;
 import com.oracle.graal.compiler.aarch64.AArch64LIRGenerator;
+import com.oracle.graal.compiler.common.calc.Condition;
 import com.oracle.graal.compiler.common.spi.ForeignCallLinkage;
 import com.oracle.graal.compiler.common.spi.LIRKindTool;
 import com.oracle.graal.hotspot.HotSpotBackend;
 import com.oracle.graal.hotspot.HotSpotDebugInfoBuilder;
+import com.oracle.graal.hotspot.HotSpotForeignCallLinkage;
 import com.oracle.graal.hotspot.HotSpotLIRGenerationResult;
 import com.oracle.graal.hotspot.HotSpotLIRGenerator;
 import com.oracle.graal.hotspot.HotSpotLockStack;
 import com.oracle.graal.hotspot.meta.HotSpotProviders;
+import com.oracle.graal.hotspot.meta.HotSpotRegistersProvider;
 import com.oracle.graal.hotspot.stubs.Stub;
 import com.oracle.graal.lir.LIRFrameState;
+import com.oracle.graal.lir.LabelRef;
 import com.oracle.graal.lir.StandardOp.SaveRegistersOp;
+import com.oracle.graal.lir.SwitchStrategy;
 import com.oracle.graal.lir.Variable;
 import com.oracle.graal.lir.VirtualStackSlot;
 import com.oracle.graal.lir.aarch64.AArch64AddressValue;
+import com.oracle.graal.lir.aarch64.AArch64Call;
+import com.oracle.graal.lir.aarch64.AArch64ControlFlow.StrategySwitchOp;
 import com.oracle.graal.lir.aarch64.AArch64FrameMapBuilder;
 import com.oracle.graal.lir.aarch64.AArch64Move.StoreOp;
 import com.oracle.graal.lir.gen.LIRGenerationResult;
 
+import jdk.vm.ci.aarch64.AArch64;
 import jdk.vm.ci.aarch64.AArch64Kind;
 import jdk.vm.ci.code.CallingConvention;
+import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterValue;
 import jdk.vm.ci.common.JVMCIError;
+import jdk.vm.ci.hotspot.HotSpotCompressedNullConstant;
+import jdk.vm.ci.hotspot.HotSpotObjectConstant;
 import jdk.vm.ci.hotspot.HotSpotVMConfig;
 import jdk.vm.ci.meta.AllocatableValue;
+import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.DeoptimizationAction;
 import jdk.vm.ci.meta.DeoptimizationReason;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.LIRKind;
+import jdk.vm.ci.meta.PlatformKind;
 import jdk.vm.ci.meta.Value;
 
 /**
@@ -77,14 +97,26 @@ public class AArch64HotSpotLIRGenerator extends AArch64LIRGenerator implements H
     }
 
     @Override
+    public HotSpotProviders getProviders() {
+        return (HotSpotProviders) super.getProviders();
+    }
+
+    @Override
     public boolean needOnlyOopMaps() {
         // Stubs only need oop maps
         return getResult().getStub() != null;
     }
 
+    @SuppressWarnings("unused") private LIRFrameState currentRuntimeCallInfo;
+
     @Override
-    public HotSpotProviders getProviders() {
-        return (HotSpotProviders) super.getProviders();
+    protected void emitForeignCallOp(ForeignCallLinkage linkage, Value result, Value[] arguments, Value[] temps, LIRFrameState info) {
+        currentRuntimeCallInfo = info;
+        if (AArch64Call.isNearCall(linkage)) {
+            append(new AArch64Call.DirectNearForeignCallOp(linkage, result, arguments, temps, info, label));
+        } else {
+            append(new AArch64Call.DirectFarForeignCallOp(linkage, result, arguments, temps, info, label));
+        }
     }
 
     @Override
@@ -105,6 +137,43 @@ public class AArch64HotSpotLIRGenerator extends AArch64LIRGenerator implements H
     private HotSpotLockStack getLockStack() {
         assert debugInfoBuilder != null && debugInfoBuilder.lockStack() != null;
         return debugInfoBuilder.lockStack();
+    }
+
+    @Override
+    public void emitCompareBranch(PlatformKind cmpKind, Value x, Value y, Condition cond, boolean unorderedIsTrue, LabelRef trueDestination, LabelRef falseDestination,
+                    double trueDestinationProbability) {
+        Value localX = x;
+        Value localY = y;
+        if (localX instanceof HotSpotObjectConstant) {
+            localX = load(localX);
+        }
+        if (localY instanceof HotSpotObjectConstant) {
+            localY = load(localY);
+        }
+        super.emitCompareBranch(cmpKind, localX, localY, cond, unorderedIsTrue, trueDestination, falseDestination, trueDestinationProbability);
+    }
+
+    @Override
+    protected boolean emitCompare(PlatformKind cmpKind, Value a, Value b, Condition condition, boolean unorderedIsTrue) {
+        Value localA = a;
+        Value localB = b;
+        if (isConstantValue(a)) {
+            Constant c = asConstant(a);
+            if (HotSpotCompressedNullConstant.COMPRESSED_NULL.equals(c)) {
+                localA = AArch64.zr.asValue(LIRKind.value(AArch64Kind.DWORD));
+            } else if (c instanceof HotSpotObjectConstant) {
+                localA = load(localA);
+            }
+        }
+        if (isConstantValue(b)) {
+            Constant c = asConstant(b);
+            if (HotSpotCompressedNullConstant.COMPRESSED_NULL.equals(c)) {
+                localB = AArch64.zr.asValue(LIRKind.value(AArch64Kind.DWORD));
+            } else if (c instanceof HotSpotObjectConstant) {
+                localB = load(localB);
+            }
+        }
+        return super.emitCompare(cmpKind, localA, localB, condition, unorderedIsTrue);
     }
 
     @Override
@@ -163,6 +232,39 @@ public class AArch64HotSpotLIRGenerator extends AArch64LIRGenerator implements H
         }
 
         getResult().setMaxInterpreterFrameSize(debugInfoBuilder.maxInterpreterFrameSize());
+    }
+
+    private Label label;
+
+    @Override
+    public Variable emitForeignCall(ForeignCallLinkage linkage, LIRFrameState state, Value... args) {
+        HotSpotForeignCallLinkage hotspotLinkage = (HotSpotForeignCallLinkage) linkage;
+        Variable result;
+        LIRFrameState debugInfo = null;
+        if (hotspotLinkage.needsDebugInfo()) {
+            debugInfo = state;
+            assert debugInfo != null || getStub() != null;
+        }
+
+        if (linkage.destroysRegisters() || hotspotLinkage.needsJavaFrameAnchor()) {
+            HotSpotRegistersProvider registers = getProviders().getRegisters();
+            Register thread = registers.getThreadRegister();
+            Variable scratch = newVariable(LIRKind.value(target().arch.getWordKind()));
+
+            // We need a label for the return address.
+            label = new Label();
+
+            append(new AArch64HotSpotCRuntimeCallPrologueOp(config.threadLastJavaSpOffset(), config.threadLastJavaPcOffset(), config.threadLastJavaFpOffset(), thread, scratch, label));
+            result = super.emitForeignCall(hotspotLinkage, debugInfo, args);
+            append(new AArch64HotSpotCRuntimeCallEpilogueOp(config.threadLastJavaSpOffset(), config.threadLastJavaFpOffset(), thread));
+
+            // Clear it out so it's not being reused later.
+            label = null;
+        } else {
+            result = super.emitForeignCall(hotspotLinkage, debugInfo, args);
+        }
+
+        return result;
     }
 
     @Override
@@ -224,6 +326,12 @@ public class AArch64HotSpotLIRGenerator extends AArch64LIRGenerator implements H
     @Override
     public HotSpotLIRGenerationResult getResult() {
         return ((HotSpotLIRGenerationResult) super.getResult());
+    }
+
+    @Override
+    protected StrategySwitchOp createStrategySwitchOp(SwitchStrategy strategy, LabelRef[] keyTargets, LabelRef defaultTarget, Variable key, AllocatableValue scratchValue,
+                    Function<Condition, ConditionFlag> converter) {
+        return new AArch64HotSpotStrategySwitchOp(strategy, keyTargets, defaultTarget, key, scratchValue, converter);
     }
 
     public void setDebugInfoBuilder(HotSpotDebugInfoBuilder debugInfoBuilder) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -49,7 +49,7 @@ public class AArch64HotSpotCRuntimeCallEpilogueOp extends AArch64LIRInstruction 
 
     @Override
     public void emitCode(CompilationResultBuilder crb, AArch64MacroAssembler masm) {
-        // reset last Java frame:
+        // Reset last Java frame:
         masm.str(64, zr, masm.makeAddress(thread, threadLastJavaSpOffset, 8));
         masm.str(64, zr, masm.makeAddress(thread, threadLastJavaFpOffset, 8));
     }

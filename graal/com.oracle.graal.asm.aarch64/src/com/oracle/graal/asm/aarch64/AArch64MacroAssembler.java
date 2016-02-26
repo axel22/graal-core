@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -319,32 +319,25 @@ public class AArch64MacroAssembler extends AArch64Assembler {
     }
 
     public void mov(int size, Register dst, Register src) {
-        if (dst.equals(src)) {
-            return;
-        }
         if (dst.equals(sp) || src.equals(sp)) {
             add(size, dst, src, 0);
         } else {
-            or(size, dst, src, zr);
+            or(size, dst, zr, src);
         }
     }
 
     /**
-     * Generates a move 64-bit immediate code sequence. The immediate may later be updated by
-     * HotSpot.
-     *
-     * In AArch64 mode the virtual address space is 48 bits in size, so we only need three
-     * instructions to create a patchable instruction sequence that can reach anywhere.
+     * Generates a 64-bit immediate move code sequence.
      *
      * @param dst general purpose register. May not be null, stackpointer or zero-register.
      * @param imm
      */
-    public void forceMov(Register dst, long imm, boolean optimize) {
+    private void mov64(Register dst, long imm) {
         // We have to move all non zero parts of the immediate in 16-bit chunks
         boolean firstMove = true;
-        for (int offset = 0; offset < 48; offset += 16) {
+        for (int offset = 0; offset < 64; offset += 16) {
             int chunk = (int) (imm >> offset) & NumUtil.getNbitNumberInt(16);
-            if (optimize && chunk == 0) {
+            if (chunk == 0) {
                 continue;
             }
             if (firstMove) {
@@ -355,10 +348,6 @@ public class AArch64MacroAssembler extends AArch64Assembler {
             }
         }
         assert !firstMove;
-    }
-
-    public void forceMov(Register dst, long imm) {
-        forceMov(dst, imm, /* optimize */false);
     }
 
     /**
@@ -381,7 +370,7 @@ public class AArch64MacroAssembler extends AArch64Assembler {
             mov(dst, (int) imm);
             sxt(64, 32, dst, dst);
         } else {
-            forceMov(dst, imm, /* optimize move */true);
+            mov64(dst, imm);
         }
     }
 
@@ -393,6 +382,32 @@ public class AArch64MacroAssembler extends AArch64Assembler {
      */
     public void mov(Register dst, int imm) {
         mov(dst, imm & 0xFFFF_FFFFL);
+    }
+
+    /**
+     * Generates a 48-bit immediate move code sequence. The immediate may later be updated by
+     * HotSpot.
+     *
+     * In AArch64 mode the virtual address space is 48-bits in size, so we only need three
+     * instructions to create a patchable instruction sequence that can reach anywhere.
+     *
+     * @param dst general purpose register. May not be null, stackpointer or zero-register.
+     * @param imm
+     */
+    public void movNativeAddress(Register dst, long imm) {
+        assert (imm & 0xFFFF_0000_0000_0000L) == 0;
+        // We have to move all non zero parts of the immediate in 16-bit chunks
+        boolean firstMove = true;
+        for (int offset = 0; offset < 48; offset += 16) {
+            int chunk = (int) (imm >> offset) & NumUtil.getNbitNumberInt(16);
+            if (firstMove) {
+                movz(64, dst, chunk, offset);
+                firstMove = false;
+            } else {
+                movk(64, dst, chunk, offset);
+            }
+        }
+        assert !firstMove;
     }
 
     /**
@@ -724,7 +739,10 @@ public class AArch64MacroAssembler extends AArch64Assembler {
     }
 
     /**
-     * @return True if immediate can be used directly for arithmetic instructions (add/sub), false
+     * Add/subtract instruction encoding supports 12-bit immediate values.
+     *
+     * @param imm immediate value to be tested.
+     * @return true if immediate can be used directly for arithmetic instructions (add/sub), false
      *         otherwise.
      */
     public static boolean isArithmeticImmediate(long imm) {
@@ -734,30 +752,41 @@ public class AArch64MacroAssembler extends AArch64Assembler {
     }
 
     /**
-     * @return True if immediate can be used directly with comparison instructions, false otherwise.
+     * Compare instructions are add/subtract instructions and so support 12-bit immediate values.
+     *
+     * @param imm immediate value to be tested.
+     * @return true if immediate can be used directly with comparison instructions, false otherwise.
      */
     public static boolean isComparisonImmediate(long imm) {
         return isArithmeticImmediate(imm);
     }
 
     /**
-     * @return True if immediate can be moved directly into a register, false otherwise.
+     * Move wide immediate instruction encoding supports 16-bit immediate values which can be
+     * optionally-shifted by multiples of 16 (i.e. 0, 16, 32, 48).
+     *
+     * @return true if immediate can be moved directly into a register, false otherwise.
      */
     public static boolean isMovableImmediate(long imm) {
-        // Moves allow a 16bit immediate value that can be shifted by multiples of 16.
-        // Positions of first, respectively last set bit.
-        int start = Long.numberOfTrailingZeros(imm);
-        int end = 64 - Long.numberOfLeadingZeros(imm);
-        int length = end - start;
-        if (length > 16) {
-            return false;
-        }
-        // We can shift the necessary part of the immediate (i.e. everything between the first and
-        // last set bit) by as much as 16 - length around to arrive at a valid shift amount
-        int tolerance = 16 - length;
-        int prevMultiple = NumUtil.roundDown(start, 16);
-        int nextMultiple = NumUtil.roundUp(start, 16);
-        return start - prevMultiple <= tolerance || nextMultiple - start <= tolerance;
+        // // Positions of first, respectively last set bit.
+        // int start = Long.numberOfTrailingZeros(imm);
+        // int end = 64 - Long.numberOfLeadingZeros(imm);
+        // int length = end - start;
+        // if (length > 16) {
+        // return false;
+        // }
+        // // We can shift the necessary part of the immediate (i.e. everything between the first
+        // and
+        // // last set bit) by as much as 16 - length around to arrive at a valid shift amount
+        // int tolerance = 16 - length;
+        // int prevMultiple = NumUtil.roundDown(start, 16);
+        // int nextMultiple = NumUtil.roundUp(start, 16);
+        // return start - prevMultiple <= tolerance || nextMultiple - start <= tolerance;
+        /*
+         * This is a bit optimistic because the constant could also be for an arithmetic instruction
+         * which only supports 12-bits. That case needs to be handled in the backend.
+         */
+        return NumUtil.isInt(Math.abs(imm)) && NumUtil.isUnsignedNbit(16, (int) Math.abs(imm));
     }
 
     /**
@@ -963,9 +992,6 @@ public class AArch64MacroAssembler extends AArch64Assembler {
     @Override
     public void fmov(int size, Register dst, Register src) {
         assert !(dst.getRegisterCategory().equals(CPU) && src.getRegisterCategory().equals(CPU)) : "src and dst cannot both be integer registers.";
-        if (dst.equals(src)) {
-            return;
-        }
         if (dst.getRegisterCategory().equals(CPU)) {
             super.fmovFpu2Cpu(size, dst, src);
         } else if (src.getRegisterCategory().equals(CPU)) {
@@ -1089,7 +1115,8 @@ public class AArch64MacroAssembler extends AArch64Assembler {
         BRANCH_UNCONDITIONALLY(0x1),
         BRANCH_NONZERO(0x2),
         BRANCH_ZERO(0x3),
-        JUMP_ADDRESS(0x4);
+        JUMP_ADDRESS(0x4),
+        ADR(0x5);
 
         /**
          * Offset by which additional information for branch conditionally, branch zero and branch
@@ -1110,6 +1137,18 @@ public class AArch64MacroAssembler extends AArch64Assembler {
             return values()[encoding & NumUtil.getNbitNumberInt(INFORMATION_OFFSET)];
         }
 
+    }
+
+    public void adr(Register dst, Label label) {
+        // TODO Handle case where offset is too large for a single jump instruction
+        if (label.isBound()) {
+            int offset = label.position() - position();
+            super.adr(dst, offset);
+        } else {
+            label.addPatchAt(position());
+            // Encode condition flag so that we know how to patch the instruction later
+            emitInt(PatchLabelKind.ADR.encoding | dst.encoding << PatchLabelKind.INFORMATION_OFFSET);
+        }
     }
 
     /**
@@ -1307,16 +1346,16 @@ public class AArch64MacroAssembler extends AArch64Assembler {
         switch (type) {
             case BRANCH_CONDITIONALLY:
                 ConditionFlag cf = ConditionFlag.fromEncoding(instruction >>> PatchLabelKind.INFORMATION_OFFSET);
-                super.b(cf, branchOffset, /* pos */branch);
+                super.b(cf, branchOffset, branch);
                 break;
             case BRANCH_UNCONDITIONALLY:
-                super.b(branchOffset, /* pos */branch);
+                super.b(branchOffset, branch);
                 break;
             case JUMP_ADDRESS:
-                emitInt(jumpTarget, /* pos */branch);
+                emitInt(jumpTarget, branch);
                 break;
             case BRANCH_NONZERO:
-            case BRANCH_ZERO:
+            case BRANCH_ZERO: {
                 int information = instruction >>> PatchLabelKind.INFORMATION_OFFSET;
                 int sizeEncoding = information & 1;
                 int regEncoding = information >>> 1;
@@ -1325,13 +1364,21 @@ public class AArch64MacroAssembler extends AArch64Assembler {
                 int size = sizeEncoding * 32 + 32;
                 switch (type) {
                     case BRANCH_NONZERO:
-                        super.cbnz(size, reg, branchOffset, /* pos */branch);
+                        super.cbnz(size, reg, branchOffset, branch);
                         break;
                     case BRANCH_ZERO:
-                        super.cbz(size, reg, branchOffset, /* pos */branch);
+                        super.cbz(size, reg, branchOffset, branch);
                         break;
                 }
                 break;
+            }
+            case ADR: {
+                int information = instruction >>> PatchLabelKind.INFORMATION_OFFSET;
+                int regEncoding = information;
+                Register reg = AArch64.cpuRegisters[regEncoding];
+                super.adr(reg, branchOffset, branch);
+                break;
+            }
             default:
                 throw JVMCIError.shouldNotReachHere();
         }
@@ -1340,8 +1387,8 @@ public class AArch64MacroAssembler extends AArch64Assembler {
     /**
      * Generates an address of the form {@code base + displacement}.
      *
-     * Does not change base register to fulfil this requirement. Will fail if displacement cannot be
-     * represented directly as address.
+     * Does not change base register to fulfill this requirement. Will fail if displacement cannot
+     * be represented directly as address.
      *
      * @param base general purpose register. May not be null or the zero register.
      * @param displacement arbitrary displacement added to base.

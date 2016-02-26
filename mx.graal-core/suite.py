@@ -31,7 +31,7 @@ def suites(l):
     return [s for s in l if not JDK9 or not s.get('name') == "jvmci"]
 
 suite = {
-  "mxversion" : "5.7.0",
+  "mxversion" : "5.8.1",
   "name" : "graal-core",
 
   "imports" : {
@@ -39,7 +39,7 @@ suite = {
             {
                "name" : "jvmci",
                "optional" : "true",
-               "version" : "b9114ca0c17410153562b5ddb56d26c606d8d0cd",
+               "version" : "535ad9410374a8a2f2dbeeaaef15573931e09ecd",
                "urls" : [
                     {"url" : "http://lafo.ssw.uni-linz.ac.at/hg/graal-jvmci-8", "kind" : "hg"},
                     {"url" : "https://curio.ssw.jku.at/nexus/content/repositories/snapshots", "kind" : "binary"},
@@ -47,7 +47,7 @@ suite = {
             },
             {
                "name" : "truffle",
-               "version" : "c6886343eeaa0c98c0869491189e3c57a005bae0",
+               "version" : "da131e23814fb5c7054f0b59a0bf141e56edc0c4",
                "urls" : [
                     {"url" : "https://github.com/graalvm/truffle.git", "kind" : "git"},
                     {"url" : "https://curio.ssw.jku.at/nexus/content/repositories/snapshots", "kind" : "binary"},
@@ -130,6 +130,7 @@ suite = {
       "subDir" : "graal",
       "sourceDirs" : ["src"],
       "dependencies" : deps(["jvmci:JVMCI_SERVICES"]),
+      "checkstyle" : "com.oracle.graal.graph",
       "javaCompliance" : "1.8",
       "workingSets" : "API,Graal",
     },
@@ -1086,6 +1087,18 @@ suite = {
         "GRAAL_SERVICEPROVIDER_PROCESSOR"
       ],
       "workingSets" : "Graal,Truffle",
+    },
+
+    "com.oracle.graal.truffle.hotspot.test" : {
+      "subDir" : "graal",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "com.oracle.graal.truffle.hotspot",
+        "com.oracle.graal.compiler.test",
+      ],
+      "checkstyle" : "com.oracle.graal.graph",
+      "javaCompliance" : "1.8",
+      "workingSets" : "Graal,Truffle,Test",
     },
 
     "com.oracle.graal.truffle.hotspot.amd64" : {

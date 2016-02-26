@@ -31,7 +31,7 @@ import sanitycheck
 import re
 
 import mx
-from mx_gate import Task, Tags
+from mx_gate import Task
 from sanitycheck import _noneAsEmptyList
 
 from mx_unittest import unittest
@@ -205,7 +205,11 @@ class UnitTestRun:
     def run(self, suites, tasks, extraVMarguments=None):
         for suite in suites:
             with Task(self.name + ': hosted-product ' + suite, tasks, tags=self.tags) as t:
-                if t: unittest(['--suite', suite, '--fail-fast'] + self.args + _noneAsEmptyList(extraVMarguments))
+                if mx_gate.Task.verbose:
+                    extra_args = ['--verbose', '--enable-timing']
+                else:
+                    extra_args = []
+                if t: unittest(['--suite', suite, '--fail-fast'] + extra_args + self.args + _noneAsEmptyList(extraVMarguments))
 
 class BootstrapTest:
     def __init__(self, name, vmbuild, args, tags, suppress=None):
@@ -236,6 +240,7 @@ class MicrobenchRun:
 
 class GraalTags:
     test = 'test'
+    bootstrap = 'bootstrap'
     fulltest = 'fulltest'
 
 def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVMarguments=None):
@@ -289,7 +294,7 @@ graal_unit_test_runs = [
 _registers = 'o0,o1,o2,o3,f8,f9,d32,d34' if mx.get_arch() == 'sparcv9' else 'rbx,r11,r10,r14,xmm3,xmm11,xmm14'
 
 graal_bootstrap_tests = [
-    BootstrapTest('BootstrapWithSystemAssertions', 'fastdebug', ['-esa'], tags=[GraalTags.test]),
+    BootstrapTest('BootstrapWithSystemAssertions', 'fastdebug', ['-esa'], tags=[GraalTags.bootstrap]),
     BootstrapTest('BootstrapWithSystemAssertionsNoCoop', 'fastdebug', ['-esa', '-XX:-UseCompressedOops', '-G:+ExitVMOnException'], tags=[GraalTags.fulltest]),
     BootstrapTest('BootstrapWithGCVerification', 'product', ['-XX:+UnlockDiagnosticVMOptions', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC', '-G:+ExitVMOnException'], tags=[GraalTags.fulltest], suppress=['VerifyAfterGC:', 'VerifyBeforeGC:']),
     BootstrapTest('BootstrapWithG1GCVerification', 'product', ['-XX:+UnlockDiagnosticVMOptions', '-XX:-UseSerialGC', '-XX:+UseG1GC', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC', '-G:+ExitVMOnException'], tags=[GraalTags.fulltest], suppress=['VerifyAfterGC:', 'VerifyBeforeGC:']),
