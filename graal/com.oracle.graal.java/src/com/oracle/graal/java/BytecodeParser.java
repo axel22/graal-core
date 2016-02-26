@@ -225,11 +225,7 @@ import static com.oracle.graal.bytecode.Bytecodes.SIPUSH;
 import static com.oracle.graal.bytecode.Bytecodes.SWAP;
 import static com.oracle.graal.bytecode.Bytecodes.TABLESWITCH;
 import static com.oracle.graal.bytecode.Bytecodes.nameOf;
-import static com.oracle.graal.compiler.common.GraalOptions.DeoptALot;
-import static com.oracle.graal.compiler.common.GraalOptions.NewInfopoints;
-import static com.oracle.graal.compiler.common.GraalOptions.PrintProfilingInformation;
-import static com.oracle.graal.compiler.common.GraalOptions.ResolveClassBeforeStaticInvoke;
-import static com.oracle.graal.compiler.common.GraalOptions.StressInvokeWithExceptionNode;
+import static com.oracle.graal.compiler.common.GraalOptions.*;
 import static com.oracle.graal.compiler.common.type.StampFactory.objectNonNull;
 import static com.oracle.graal.java.BytecodeParserOptions.DumpDuringGraphBuilding;
 import static com.oracle.graal.java.BytecodeParserOptions.TraceInlineDuringParsing;
@@ -256,6 +252,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.oracle.graal.nodes.*;
 import jdk.vm.ci.code.BailoutException;
 import jdk.vm.ci.code.BytecodeFrame;
 import jdk.vm.ci.code.BytecodePosition;
@@ -308,44 +305,7 @@ import com.oracle.graal.graph.iterators.NodeIterable;
 import com.oracle.graal.java.BciBlockMapping.BciBlock;
 import com.oracle.graal.java.BciBlockMapping.ExceptionDispatchBlock;
 import com.oracle.graal.nodeinfo.InputType;
-import com.oracle.graal.nodes.AbstractBeginNode;
-import com.oracle.graal.nodes.AbstractMergeNode;
-import com.oracle.graal.nodes.BeginNode;
-import com.oracle.graal.nodes.BeginStateSplitNode;
-import com.oracle.graal.nodes.CallTargetNode;
 import com.oracle.graal.nodes.CallTargetNode.InvokeKind;
-import com.oracle.graal.nodes.ConstantNode;
-import com.oracle.graal.nodes.ControlSplitNode;
-import com.oracle.graal.nodes.DeoptimizeNode;
-import com.oracle.graal.nodes.EndNode;
-import com.oracle.graal.nodes.EntryMarkerNode;
-import com.oracle.graal.nodes.EntryProxyNode;
-import com.oracle.graal.nodes.FixedGuardNode;
-import com.oracle.graal.nodes.FixedNode;
-import com.oracle.graal.nodes.FixedWithNextNode;
-import com.oracle.graal.nodes.FrameState;
-import com.oracle.graal.nodes.FullInfopointNode;
-import com.oracle.graal.nodes.IfNode;
-import com.oracle.graal.nodes.Invoke;
-import com.oracle.graal.nodes.InvokeNode;
-import com.oracle.graal.nodes.InvokeWithExceptionNode;
-import com.oracle.graal.nodes.KillingBeginNode;
-import com.oracle.graal.nodes.LogicConstantNode;
-import com.oracle.graal.nodes.LogicNegationNode;
-import com.oracle.graal.nodes.LogicNode;
-import com.oracle.graal.nodes.LoopBeginNode;
-import com.oracle.graal.nodes.LoopEndNode;
-import com.oracle.graal.nodes.LoopExitNode;
-import com.oracle.graal.nodes.MergeNode;
-import com.oracle.graal.nodes.ParameterNode;
-import com.oracle.graal.nodes.PiNode;
-import com.oracle.graal.nodes.ReturnNode;
-import com.oracle.graal.nodes.SimpleInfopointNode;
-import com.oracle.graal.nodes.StartNode;
-import com.oracle.graal.nodes.StateSplit;
-import com.oracle.graal.nodes.StructuredGraph;
-import com.oracle.graal.nodes.UnwindNode;
-import com.oracle.graal.nodes.ValueNode;
 import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
 import com.oracle.graal.nodes.calc.ConditionalNode;
@@ -2346,7 +2306,7 @@ public class BytecodeParser implements GraphBuilderContext {
         return instr;
     }
 
-    private void genInfoPointNode(InfopointReason reason, ValueNode escapedReturnValue) {
+    protected void genInfoPointNode(InfopointReason reason, ValueNode escapedReturnValue) {
         if (!parsingIntrinsic()) {
             if (graphBuilderConfig.insertFullDebugInfo()) {
                 append(new FullInfopointNode(reason, createFrameState(bci(), null), escapedReturnValue));
@@ -2445,6 +2405,7 @@ public class BytecodeParser implements GraphBuilderContext {
             this.controlFlowSplit = true;
             FixedNode trueSuccessor = createTarget(trueBlock, frameState, false, false);
             FixedNode falseSuccessor = createTarget(falseBlock, frameState, false, true);
+            genIfNodeInstrumentation();
             ValueNode ifNode = genIfNode(condition, trueSuccessor, falseSuccessor, probability);
             append(ifNode);
             if (parsingIntrinsic()) {
@@ -2455,6 +2416,10 @@ public class BytecodeParser implements GraphBuilderContext {
                 }
             }
         }
+    }
+
+    /* Hook for subclasses of BytecodeParser to generate custom nodes before an IfNode. */
+    protected void genIfNodeInstrumentation() {
     }
 
     private boolean tryGenConditionalForIf(BciBlock trueBlock, BciBlock falseBlock, LogicNode condition, int oldBci, int trueBlockInt, int falseBlockInt) {

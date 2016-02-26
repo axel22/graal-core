@@ -22,27 +22,11 @@
  */
 package com.oracle.graal.truffle;
 
-import static com.oracle.graal.compiler.GraalCompiler.compileGraph;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import jdk.vm.ci.code.CompiledCode;
-import jdk.vm.ci.code.InstalledCode;
-import jdk.vm.ci.meta.ConstantReflectionProvider;
-import jdk.vm.ci.meta.MetaAccessProvider;
-import jdk.vm.ci.meta.ResolvedJavaType;
-import jdk.vm.ci.meta.SpeculationLog;
-
 import com.oracle.graal.api.replacements.SnippetReflectionProvider;
 import com.oracle.graal.code.CompilationResult;
 import com.oracle.graal.compiler.target.Backend;
-import com.oracle.graal.debug.Debug;
+import com.oracle.graal.debug.*;
 import com.oracle.graal.debug.Debug.Scope;
-import com.oracle.graal.debug.DebugCloseable;
-import com.oracle.graal.debug.DebugEnvironment;
-import com.oracle.graal.debug.DebugMemUseTracker;
-import com.oracle.graal.debug.DebugTimer;
 import com.oracle.graal.lir.phases.LIRSuites;
 import com.oracle.graal.nodes.StructuredGraph;
 import com.oracle.graal.nodes.StructuredGraph.AllowAssumptions;
@@ -50,6 +34,8 @@ import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import com.oracle.graal.phases.OptimisticOptimizations;
 import com.oracle.graal.phases.PhaseSuite;
+import com.oracle.graal.phases.common.LoweringPhase;
+import com.oracle.graal.truffle.phases.InstrumentBranchesPhase;
 import com.oracle.graal.phases.tiers.HighTierContext;
 import com.oracle.graal.phases.tiers.Suites;
 import com.oracle.graal.phases.util.Providers;
@@ -57,6 +43,17 @@ import com.oracle.graal.truffle.nodes.AssumptionValidAssumption;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.nodes.SlowPathException;
 import com.oracle.truffle.api.nodes.UnexpectedResultException;
+import jdk.vm.ci.code.CompiledCode;
+import jdk.vm.ci.code.InstalledCode;
+import jdk.vm.ci.meta.ConstantReflectionProvider;
+import jdk.vm.ci.meta.MetaAccessProvider;
+import jdk.vm.ci.meta.ResolvedJavaType;
+import jdk.vm.ci.meta.SpeculationLog;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static com.oracle.graal.compiler.GraalCompiler.compileGraph;
 
 /**
  * Implementation of the Truffle compiler using Graal.
@@ -64,6 +61,7 @@ import com.oracle.truffle.api.nodes.UnexpectedResultException;
 public abstract class TruffleCompiler {
 
     protected final Providers providers;
+
     protected final Suites suites;
     protected final GraphBuilderConfiguration config;
     protected final LIRSuites lirSuites;
@@ -134,6 +132,10 @@ public abstract class TruffleCompiler {
     public static final DebugMemUseTracker PartialEvaluationMemUse = Debug.memUseTracker("TrufflePartialEvaluationMemUse");
     public static final DebugMemUseTracker CompilationMemUse = Debug.memUseTracker("TruffleCompilationMemUse");
     public static final DebugMemUseTracker CodeInstallationMemUse = Debug.memUseTracker("TruffleCodeInstallationMemUse");
+
+    public Suites getSuites() {
+        return suites;
+    }
 
     @SuppressWarnings("try")
     public void compileMethod(final OptimizedCallTarget compilable) {

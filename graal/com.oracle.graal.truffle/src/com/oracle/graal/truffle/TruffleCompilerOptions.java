@@ -189,5 +189,14 @@ public class TruffleCompilerOptions {
     @Option(help = "Enable/disable builtin profiles in com.oracle.truffle.api.profiles.", type = OptionType.Debug)
     public static final OptionValue<Boolean> TruffleProfilingEnabled = new OptionValue<>(true);
 
+    @Option(help = "Instrument branches and output profiling information to the standard output.")
+    public static final OptionValue<Boolean> InstrumentBranches = new OptionValue<>(false);
+
+    @Option(help = "Regex filter for branch instrumentation.")
+    public static final OptionValue<String> InstrumentBranchesFilter = new OptionValue<>("");
+
+    @Option(help = "Branch instrumentation count.")
+    public static final OptionValue<Integer> InstrumentBranchesCount = new OptionValue<>(10000);
+
     // @formatter:on
 }
