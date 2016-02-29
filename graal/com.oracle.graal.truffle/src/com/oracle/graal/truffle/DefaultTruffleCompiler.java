@@ -22,13 +22,17 @@
  */
 package com.oracle.graal.truffle;
 
+import java.util.ListIterator;
+
+import jdk.vm.ci.meta.ResolvedJavaMethod;
+
 import com.oracle.graal.api.replacements.SnippetReflectionProvider;
 import com.oracle.graal.compiler.target.Backend;
 import com.oracle.graal.java.BytecodeParser;
 import com.oracle.graal.java.GraphBuilderPhase;
 import com.oracle.graal.lir.phases.LIRSuites;
-import com.oracle.graal.nodes.InfopointNode;
 import com.oracle.graal.nodes.StructuredGraph;
+import com.oracle.graal.nodes.ValueNode;
 import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration;
 import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import com.oracle.graal.nodes.graphbuilderconf.IntrinsicContext;
@@ -37,10 +41,7 @@ import com.oracle.graal.phases.PhaseSuite;
 import com.oracle.graal.phases.tiers.HighTierContext;
 import com.oracle.graal.phases.tiers.Suites;
 import com.oracle.graal.runtime.RuntimeProvider;
-import jdk.vm.ci.code.site.InfopointReason;
-import jdk.vm.ci.meta.ResolvedJavaMethod;
-
-import java.util.ListIterator;
+import com.oracle.graal.truffle.phases.InstrumentBranchesPhase;
 
 public final class DefaultTruffleCompiler extends TruffleCompiler {
 
@@ -98,11 +99,9 @@ public final class DefaultTruffleCompiler extends TruffleCompiler {
                                                           IntrinsicContext intrinsicContext) {
                 return new BytecodeParser(this, graph, parent, method, entryBCI, intrinsicContext) {
                     @Override
-                    protected void genIfNodeInstrumentation() {
+                    protected void postProcessIfNode(ValueNode node) {
                         if (TruffleCompilerOptions.InstrumentBranches.getValue()) {
-                            if (!(lastInstr instanceof InfopointNode)) {
-                                genInfoPointNode(InfopointReason.BYTECODE_POSITION, null);
-                            }
+                            InstrumentBranchesPhase.addNodeSourceLocation(node, createBytecodePosition());
                         }
                     }
                 };

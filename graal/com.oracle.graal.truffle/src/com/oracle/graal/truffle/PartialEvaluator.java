@@ -22,6 +22,17 @@
  */
 package com.oracle.graal.truffle;
 
+import static com.oracle.graal.nodes.StructuredGraph.NO_PROFILING_INFO;
+import static com.oracle.graal.truffle.TruffleCompilerOptions.PrintTruffleExpansionHistogram;
+
+import java.lang.invoke.MethodHandle;
+import java.util.*;
+
+import jdk.vm.ci.code.Architecture;
+import jdk.vm.ci.common.JVMCIError;
+import jdk.vm.ci.meta.*;
+import jdk.vm.ci.services.Services;
+
 import com.oracle.graal.api.replacements.SnippetReflectionProvider;
 import com.oracle.graal.compiler.common.type.Stamp;
 import com.oracle.graal.debug.Debug;
@@ -46,7 +57,6 @@ import com.oracle.graal.phases.PhaseSuite;
 import com.oracle.graal.phases.common.CanonicalizerPhase;
 import com.oracle.graal.phases.common.ConvertDeoptimizeToGuardPhase;
 import com.oracle.graal.phases.common.DominatorConditionalEliminationPhase;
-import com.oracle.graal.phases.common.LoweringPhase;
 import com.oracle.graal.phases.common.inlining.InliningUtil;
 import com.oracle.graal.phases.tiers.HighTierContext;
 import com.oracle.graal.phases.tiers.PhaseContext;
@@ -69,16 +79,6 @@ import com.oracle.graal.virtual.phases.ea.PartialEscapePhase;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
-import jdk.vm.ci.code.Architecture;
-import jdk.vm.ci.common.JVMCIError;
-import jdk.vm.ci.meta.*;
-import jdk.vm.ci.services.Services;
-
-import java.lang.invoke.MethodHandle;
-import java.util.*;
-
-import static com.oracle.graal.nodes.StructuredGraph.NO_PROFILING_INFO;
-import static com.oracle.graal.truffle.TruffleCompilerOptions.PrintTruffleExpansionHistogram;
 
 /**
  * Class performing the partial evaluation starting from the root node of an AST.

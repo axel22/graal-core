@@ -22,25 +22,28 @@
  */
 package com.oracle.graal.truffle.phases;
 
-import com.oracle.graal.compiler.common.type.StampFactory;
-import com.oracle.graal.graph.Node;
-import com.oracle.graal.nodes.*;
-import com.oracle.graal.nodes.java.StoreIndexedNode;
-import com.oracle.graal.phases.BasePhase;
-import com.oracle.graal.phases.tiers.HighTierContext;
-import jdk.vm.ci.meta.JavaConstant;
-import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.ResolvedJavaField;
-import jdk.vm.ci.meta.ResolvedJavaType;
+import static com.oracle.graal.truffle.TruffleCompilerOptions.*;
 
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import static com.oracle.graal.truffle.TruffleCompilerOptions.InstrumentBranches;
-import static com.oracle.graal.truffle.TruffleCompilerOptions.InstrumentBranchesCount;
-import static com.oracle.graal.truffle.TruffleCompilerOptions.InstrumentBranchesFilter;
+import jdk.vm.ci.code.BytecodePosition;
+import jdk.vm.ci.meta.JavaConstant;
+import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaType;
+
+import com.oracle.graal.compiler.common.type.StampFactory;
+import com.oracle.graal.graph.Node;
+import com.oracle.graal.nodes.AbstractBeginNode;
+import com.oracle.graal.nodes.ConstantNode;
+import com.oracle.graal.nodes.IfNode;
+import com.oracle.graal.nodes.StructuredGraph;
+import com.oracle.graal.nodes.java.StoreIndexedNode;
+import com.oracle.graal.phases.BasePhase;
+import com.oracle.graal.phases.tiers.HighTierContext;
 
 public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
 
@@ -51,13 +54,20 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
     public static class BranchInstrumentation {
 
         public enum BranchState {
-            NONE, IF, ELSE, BOTH;
+            NONE,
+            IF,
+            ELSE,
+            BOTH;
 
             public static BranchState from(boolean ifVisited, boolean elseVisited) {
-                if (ifVisited && elseVisited) return BOTH;
-                else if (ifVisited && !elseVisited) return IF;
-                else if (!ifVisited && elseVisited) return ELSE;
-                else return NONE;
+                if (ifVisited && elseVisited)
+                    return BOTH;
+                else if (ifVisited && !elseVisited)
+                    return IF;
+                else if (!ifVisited && elseVisited)
+                    return ELSE;
+                else
+                    return NONE;
             }
         }
 
@@ -81,7 +91,8 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
 
             public int getRawIndex(boolean isTrue) {
                 int rawIndex = index * 2;
-                if (!isTrue) rawIndex += 1;
+                if (!isTrue)
+                    rawIndex += 1;
                 return rawIndex;
             }
 
@@ -110,22 +121,29 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
             });
         }
 
+        /*
+         * Node source location is determined by its inlining chain. The first location in the chain
+         * refers to the location in the original method, so we use that to determine the unique
+         * source location key.
+         */
         private String encode(Node ifNode) {
-            Node n = ifNode.predecessor();
-            if (n instanceof SimpleInfopointNode) {
-                SimpleInfopointNode infoNode = (SimpleInfopointNode) n;
-                return infoNode.getPosition().toString().replace("\n", ",");
+            SourceLocation loc = ifNode.getNodeContext(SourceLocation.class);
+            if (loc != null) {
+                return loc.getPosition().toString().replace("\n", ",");
             } else {
-                // IfNode has no position information, and is probably synthetic, so we do not instrument it.
+                // IfNode has no position information, and is probably synthetic, so we do not
+                // instrument it.
                 return null;
             }
         }
 
         public synchronized Point getOrCreatePoint(IfNode n) {
             String key = encode(n);
-            if (key == null) return null;
+            if (key == null)
+                return null;
             Point existing = pointMap.get(key);
-            if (existing != null) return existing;
+            if (existing != null)
+                return existing;
             else {
                 int index = tableCount++;
                 Point p = new Point(index);
@@ -138,8 +156,20 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
 
     public static BranchInstrumentation instrumentation = new BranchInstrumentation();
 
+    public static class SourceLocation {
+        private BytecodePosition position;
+
+        public SourceLocation(BytecodePosition position) {
+            this.position = position;
+        }
+
+        public BytecodePosition getPosition() {
+            return position;
+        }
+    }
+
     private void insertCounter(StructuredGraph graph, HighTierContext context, IfNode ifNode,
-                               BranchInstrumentation.Point p, boolean isTrue) {
+                    BranchInstrumentation.Point p, boolean isTrue) {
         Field javaField = null;
         try {
             javaField = InstrumentBranchesPhase.class.getField("TABLE");
@@ -149,13 +179,17 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
         AbstractBeginNode beginNode = (isTrue) ? ifNode.trueSuccessor() : ifNode.falseSuccessor();
         ResolvedJavaField tableField = context.getMetaAccess().lookupJavaField(javaField);
         JavaConstant tableConstant = context.getConstantReflection().readConstantFieldValue(tableField, null);
-        assert(tableConstant != null);
+        assert (tableConstant != null);
         ConstantNode table = graph.unique(new ConstantNode(tableConstant, StampFactory.exactNonNull((ResolvedJavaType) tableField.getType())));
         ConstantNode rawIndex = graph.unique(ConstantNode.forInt(p.getRawIndex(isTrue)));
         ConstantNode v = graph.unique(ConstantNode.forBoolean(true));
         StoreIndexedNode store = graph.add(new StoreIndexedNode(table, rawIndex, JavaKind.Boolean, v));
 
         graph.addAfterFixed(beginNode, store);
+    }
+
+    public static void addNodeSourceLocation(Node node, BytecodePosition pos) {
+        node.setNodeContext(new SourceLocation(pos));
     }
 
     @Override
