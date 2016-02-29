@@ -34,7 +34,7 @@ import mx
 from mx_jvmci import JVMCI_VERSION, JvmciJDKDeployedDist, JVMCIArchiveParticipant, jdkDeployedDists, add_bootclasspath_prepend, buildvms, get_jvmci_jdk, _JVMCI_JDK_TAG, VM, relativeVmLibDirInJdk, isJVMCIEnabled
 from mx_jvmci import get_vm as _jvmci_get_vm
 from mx_jvmci import run_vm as _jvmci_run_vm
-from mx_gate import Task, Tags
+from mx_gate import Task
 from sanitycheck import _noneAsEmptyList
 
 from mx_unittest import unittest
@@ -220,7 +220,11 @@ class UnitTestRun:
     def run(self, suites, tasks, extraVMarguments=None):
         for suite in suites:
             with Task(self.name + ': hosted-product ' + suite, tasks, tags=self.tags) as t:
-                if t: unittest(['--suite', suite, '--fail-fast'] + self.args + _noneAsEmptyList(extraVMarguments))
+                if mx_gate.Task.verbose:
+                    extra_args = ['--verbose', '--enable-timing']
+                else:
+                    extra_args = []
+                if t: unittest(['--suite', suite, '--fail-fast'] + extra_args + self.args + _noneAsEmptyList(extraVMarguments))
 
 class BootstrapTest:
     def __init__(self, name, vmbuild, args, tags, suppress=None):
@@ -252,12 +256,13 @@ class MicrobenchRun:
 
 class GraalTags:
     test = 'test'
+    bootstrap = 'bootstrap'
     fulltest = 'fulltest'
 
 def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVMarguments=None):
 
     # Build server-hosted-jvmci now so we can run the unit tests
-    with Task('BuildHotSpotGraalHosted: product', tasks, tags=[Tags.build]) as t:
+    with Task('BuildHotSpotGraalHosted: product', tasks, tags=[GraalTags.test, GraalTags.fulltest]) as t:
         if t: buildvms(['--vms', 'server', '--builds', 'product'])
 
     with VM('server', 'product'):
@@ -276,8 +281,10 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
             if t: ctw(['--ctwopts', '-Inline +ExitVMOnException', '-esa', '-G:+CompileTheWorldMultiThreaded', '-G:-InlineDuringParsing', '-G:-CompileTheWorldVerbose', '-XX:ReservedCodeCacheSize=400m'], _noneAsEmptyList(extraVMarguments))
 
     # Build the jvmci VMs so we can run the other tests
-    with Task('BuildHotSpotGraalOthers: fastdebug,product', tasks, tags=[Tags.build]) as t:
-        if t: buildvms(['--vms', 'jvmci', '--builds', 'fastdebug,product'])
+    with Task('BuildHotSpotGraalJVMCI: fastdebug', tasks, tags=[GraalTags.bootstrap, GraalTags.fulltest]) as t:
+        if t: buildvms(['--vms', 'jvmci', '--builds', 'fastdebug'])
+    with Task('BuildHotSpotGraalJVMCI: product', tasks, tags=[GraalTags.fulltest]) as t:
+        if t: buildvms(['--vms', 'jvmci', '--builds', 'product'])
 
     # bootstrap tests
     for b in bootstrap_tests:
@@ -314,7 +321,7 @@ graal_unit_test_runs = [
 _registers = 'o0,o1,o2,o3,f8,f9,d32,d34' if mx.get_arch() == 'sparcv9' else 'rbx,r11,r10,r14,xmm3,xmm11,xmm14'
 
 graal_bootstrap_tests = [
-    BootstrapTest('BootstrapWithSystemAssertions', 'fastdebug', ['-esa'], tags=[GraalTags.test]),
+    BootstrapTest('BootstrapWithSystemAssertions', 'fastdebug', ['-esa'], tags=[GraalTags.bootstrap]),
     BootstrapTest('BootstrapWithSystemAssertionsNoCoop', 'fastdebug', ['-esa', '-XX:-UseCompressedOops', '-G:+ExitVMOnException'], tags=[GraalTags.fulltest]),
     BootstrapTest('BootstrapWithGCVerification', 'product', ['-XX:+UnlockDiagnosticVMOptions', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC', '-G:+ExitVMOnException'], tags=[GraalTags.fulltest], suppress=['VerifyAfterGC:', 'VerifyBeforeGC:']),
     BootstrapTest('BootstrapWithG1GCVerification', 'product', ['-XX:+UnlockDiagnosticVMOptions', '-XX:-UseSerialGC', '-XX:+UseG1GC', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC', '-G:+ExitVMOnException'], tags=[GraalTags.fulltest], suppress=['VerifyAfterGC:', 'VerifyBeforeGC:']),
@@ -393,20 +400,25 @@ def jdkartifactstats(args):
         print '{:>10}  {}'.format('<missing>', jvmLib)
 
 # Support for -G: options
-def _translateGOption(arg):
-    if arg.startswith('-G:+'):
-        if '=' in arg:
-            mx.abort('Mixing + and = in -G: option specification: ' + arg)
-        arg = '-Dgraal.' + arg[len('-G:+'):] + '=true'
-    elif arg.startswith('-G:-'):
-        if '=' in arg:
-            mx.abort('Mixing - and = in -G: option specification: ' + arg)
-        arg = '-Dgraal.' + arg[len('-G:+'):] + '=false'
-    elif arg.startswith('-G:'):
-        if '=' not in arg:
-            mx.abort('Missing "=" in non-boolean -G: option specification: ' + arg)
-        arg = '-Dgraal.' + arg[len('-G:'):]
-    return arg
+def _buildGOptionsArgs(args):
+    def _translateGOption(arg):
+        if arg.startswith('-G:+'):
+            if '=' in arg:
+                mx.abort('Mixing + and = in -G: option specification: ' + arg)
+            arg = '-Dgraal.' + arg[len('-G:+'):] + '=true'
+        elif arg.startswith('-G:-'):
+            if '=' in arg:
+                mx.abort('Mixing - and = in -G: option specification: ' + arg)
+            arg = '-Dgraal.' + arg[len('-G:+'):] + '=false'
+        elif arg.startswith('-G:'):
+            if '=' not in arg:
+                mx.abort('Missing "=" in non-boolean -G: option specification: ' + arg)
+            arg = '-Dgraal.' + arg[len('-G:'):]
+        return arg
+    # add default graal.options.file and translate -G: options
+    options_file = join(mx.primary_suite().dir, 'graal.options')
+    options_file_arg = ['-Dgraal.options.file=' + options_file] if exists(options_file) else []
+    return options_file_arg + map(_translateGOption, args)
 
 def run_vm(*positionalargs, **kwargs):
     """run a Java program by executing the java executable in a Graal JDK"""
@@ -416,13 +428,13 @@ def run_vm(*positionalargs, **kwargs):
     args = positionalargs[0]
     if '-G:+PrintFlags' in args and '-Xcomp' not in args:
         mx.warn('Using -G:+PrintFlags may have no effect without -Xcomp as Graal initialization is lazy')
-    positionalargs[0] = map(_translateGOption, args)
+    positionalargs[0] = _buildGOptionsArgs(args)
     return _jvmci_run_vm(*positionalargs, **kwargs)
 
 def _unittest_config_participant(config):
     vmArgs, mainClass, mainClassArgs = config
     if isJVMCIEnabled(get_vm()):
-        return (map(_translateGOption, vmArgs), mainClass, mainClassArgs)
+        return (_buildGOptionsArgs(vmArgs), mainClass, mainClassArgs)
     return config
 
 mx_unittest.add_config_participant(_unittest_config_participant)
@@ -475,7 +487,7 @@ def get_graal_jdk():
                     JVMCI8JDKConfig.__init__(self, vmbuild)
 
                 def parseVmArgs(self, args, addDefaultArgs=True):
-                    return JVMCI8JDKConfig.parseVmArgs(self, map(_translateGOption, args), addDefaultArgs=addDefaultArgs)
+                    return JVMCI8JDKConfig.parseVmArgs(self, _buildGOptionsArgs(args), addDefaultArgs=addDefaultArgs)
 
             jdk = GraalJDK8Config(vmbuild)
             _graal_jdks[vmbuild] = jdk
@@ -488,7 +500,7 @@ def get_graal_jdk():
                     JVMCI9JDKConfig.__init__(self, debugLevel)
 
                 def parseVmArgs(self, args, addDefaultArgs=True):
-                    return JVMCI9JDKConfig.parseVmArgs(self, map(_translateGOption, args), addDefaultArgs=addDefaultArgs)
+                    return JVMCI9JDKConfig.parseVmArgs(self, _buildGOptionsArgs(args), addDefaultArgs=addDefaultArgs)
             jdk = GraalJDK9Config(jvmci_jdk.debugLevel)
             _graal_jdks['default'] = jdk
     return jdk

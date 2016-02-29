@@ -279,7 +279,11 @@ public final class CompileTheWorld {
     }
 
     public void println(String s) {
-        if (verbose) {
+        println(verbose, s);
+    }
+
+    public static void println(boolean cond, String s) {
+        if (cond) {
             TTY.println(s);
         }
     }
@@ -556,13 +560,6 @@ public final class CompileTheWorld {
 
                     classFileCounter++;
 
-                    if (methodFilters != null && !MethodFilter.matchesClassName(methodFilters, className)) {
-                        continue;
-                    }
-                    if (excludeMethodFilters != null && MethodFilter.matchesClassName(excludeMethodFilters, className)) {
-                        continue;
-                    }
-
                     if (className.startsWith("jdk.management.") || className.startsWith("jdk.internal.cmm.*")) {
                         continue;
                     }
@@ -583,6 +580,17 @@ public final class CompileTheWorld {
                             println("Preloading failed for (%d) %s: %s", classFileCounter, className, t);
                         }
 
+                        /*
+                         * Only check filters after class loading and resolution to mitigate impact
+                         * on reproducibility.
+                         */
+                        if (methodFilters != null && !MethodFilter.matchesClassName(methodFilters, className)) {
+                            continue;
+                        }
+                        if (excludeMethodFilters != null && MethodFilter.matchesClassName(excludeMethodFilters, className)) {
+                            continue;
+                        }
+
                         // Are we compiling this class?
                         MetaAccessProvider metaAccess = JVMCI.getRuntime().getHostJVMCIBackend().getMetaAccess();
                         if (classFileCounter >= startAt) {
@@ -600,6 +608,12 @@ public final class CompileTheWorld {
                                 if (canBeCompiled(javaMethod, method.getModifiers())) {
                                     compileMethod(javaMethod);
                                 }
+                            }
+
+                            // Also compile the class initializer if it exists
+                            HotSpotResolvedJavaMethod clinit = (HotSpotResolvedJavaMethod) metaAccess.lookupJavaType(javaClass).getClassInitializer();
+                            if (clinit != null && canBeCompiled(clinit, clinit.getModifiers())) {
+                                compileMethod(clinit);
                             }
                         }
                     } catch (Throwable t) {
@@ -710,12 +724,16 @@ public final class CompileTheWorld {
      *
      * @return true if it can be compiled, false otherwise
      */
-    private static boolean canBeCompiled(HotSpotResolvedJavaMethod javaMethod, int modifiers) {
+    private boolean canBeCompiled(HotSpotResolvedJavaMethod javaMethod, int modifiers) {
         if (Modifier.isAbstract(modifiers) || Modifier.isNative(modifiers)) {
             return false;
         }
         HotSpotVMConfig c = config();
         if (c.dontCompileHugeMethods && javaMethod.getCodeSize() > c.hugeMethodLimit) {
+            println(verbose || methodFilters != null,
+                            String.format("CompileTheWorld (%d) : Skipping huge method %s (use -XX:-DontCompileHugeMethods or -XX:HugeMethodLimit=%d to include it)", classFileCounter,
+                                            javaMethod.format("%H.%n(%p):%r"),
+                                            javaMethod.getCodeSize()));
             return false;
         }
         // Allow use of -XX:CompileCommand=dontinline to exclude problematic methods

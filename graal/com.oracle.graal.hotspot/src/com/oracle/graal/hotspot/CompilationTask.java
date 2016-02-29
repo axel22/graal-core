@@ -29,6 +29,7 @@ import static com.oracle.graal.compiler.GraalCompilerOptions.PrintBailout;
 import static com.oracle.graal.compiler.GraalCompilerOptions.PrintCompilation;
 import static com.oracle.graal.compiler.GraalCompilerOptions.PrintFilter;
 import static com.oracle.graal.compiler.GraalCompilerOptions.PrintStackTraceOnException;
+import static com.oracle.graal.compiler.phases.HighTier.Options.Inline;
 import jdk.vm.ci.code.BailoutException;
 import jdk.vm.ci.code.CodeCacheProvider;
 import jdk.vm.ci.code.CompilationRequestResult;
@@ -55,6 +56,8 @@ import com.oracle.graal.debug.DebugMetric;
 import com.oracle.graal.debug.DebugTimer;
 import com.oracle.graal.debug.Management;
 import com.oracle.graal.debug.TTY;
+import com.oracle.graal.options.OptionValue;
+import com.oracle.graal.options.OptionValue.OverrideScope;
 
 //JaCoCo Exclude
 
@@ -178,7 +181,14 @@ public class CompilationTask {
             try (Scope s = Debug.scope("Compiling", new DebugDumpScope(String.valueOf(getId()), true))) {
                 // Begin the compilation event.
                 compilationEvent.begin();
-                result = compiler.compile(method, entryBCI, useProfilingInfo);
+                /*
+                 * Disable inlining if HotSpot has it disabled unless it's been explicitly set in
+                 * Graal.
+                 */
+                boolean disableInlining = !config.inline && !Inline.hasBeenSet();
+                try (OverrideScope s1 = disableInlining ? OptionValue.override(Inline, false) : null) {
+                    result = compiler.compile(method, entryBCI, useProfilingInfo);
+                }
             } catch (Throwable e) {
                 throw Debug.handle(e);
             } finally {
@@ -271,7 +281,14 @@ public class CompilationTask {
     }
 
     protected void handleException(Throwable t) {
-        if (PrintStackTraceOnException.getValue() || ExitVMOnException.getValue()) {
+        /*
+         * Automatically enable ExitVMOnException when asserts are enabled but respect
+         * ExitVMOnException if it's been explicitly set.
+         */
+        boolean exitVMOnException = ExitVMOnException.getValue();
+        assert ExitVMOnException.hasBeenSet() || (exitVMOnException = true) == true;
+
+        if (PrintStackTraceOnException.getValue() || exitVMOnException) {
             try {
                 t.printStackTrace(TTY.out);
             } catch (Throwable throwable) {
@@ -279,7 +296,7 @@ public class CompilationTask {
             }
         }
 
-        if (ExitVMOnException.getValue()) {
+        if (exitVMOnException) {
             System.exit(-1);
         }
     }
