@@ -418,7 +418,7 @@ public class PartialEvaluator {
         // recompute loop frequencies now that BranchProbabilities have had time to canonicalize
         ComputeLoopFrequenciesClosure.compute(graph);
 
-        if (TruffleCompilerOptions.InstrumentBranches.getValue()) {
+        if (TruffleCompilerOptions.TruffleInstrumentBranches.getValue()) {
             new InstrumentBranchesPhase().apply(graph, tierContext);
         }
 

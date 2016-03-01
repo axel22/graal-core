@@ -37,7 +37,7 @@ public class TruffleCompilerOptions {
     /**
      * Instructs the Truffle Compiler to compile call targets only if their name contains at least one element of a comma-separated list of includes.
      * Excludes are prefixed with a tilde (~).
-     *
+     * <p>
      * The format in EBNF:
      * <pre>
      * CompileOnly = Element, { ',', Element } ;
@@ -175,13 +175,13 @@ public class TruffleCompilerOptions {
     public static final OptionValue<Boolean> TruffleProfilingEnabled = new OptionValue<>(true);
 
     @Option(help = "Instrument branches and output profiling information to the standard output.")
-    public static final OptionValue<Boolean> InstrumentBranches = new OptionValue<>(false);
+    public static final OptionValue<Boolean> TruffleInstrumentBranches = new OptionValue<>(false);
 
     @Option(help = "Regex filter for branch instrumentation.")
-    public static final OptionValue<String> InstrumentBranchesFilter = new OptionValue<>("");
+    public static final OptionValue<String> TruffleInstrumentBranchesFilter = new OptionValue<>("");
 
     @Option(help = "Branch instrumentation count.")
-    public static final OptionValue<Integer> InstrumentBranchesCount = new OptionValue<>(10000);
+    public static final OptionValue<Integer> TruffleInstrumentBranchesCount = new OptionValue<>(10000);
 
     // @formatter:on
 }

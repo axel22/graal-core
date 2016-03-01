@@ -100,7 +100,7 @@ public final class DefaultTruffleCompiler extends TruffleCompiler {
                 return new BytecodeParser(this, graph, parent, method, entryBCI, intrinsicContext) {
                     @Override
                     protected void postProcessIfNode(ValueNode node) {
-                        if (TruffleCompilerOptions.InstrumentBranches.getValue()) {
+                        if (TruffleCompilerOptions.TruffleInstrumentBranches.getValue()) {
                             InstrumentBranchesPhase.addNodeSourceLocation(node, createBytecodePosition());
                         }
                     }

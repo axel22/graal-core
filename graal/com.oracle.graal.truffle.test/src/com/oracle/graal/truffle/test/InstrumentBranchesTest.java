@@ -22,28 +22,34 @@
  */
 package com.oracle.graal.truffle.test;
 
+import jdk.vm.ci.meta.JavaConstant;
+import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.services.Services;
+
+import org.junit.Assert;
+import org.junit.Test;
+
 import com.oracle.graal.compiler.common.type.Stamp;
-import com.oracle.graal.compiler.test.GraalCompilerTest;
 import com.oracle.graal.debug.Debug;
 import com.oracle.graal.graph.Node;
-import com.oracle.graal.nodes.*;
+import com.oracle.graal.nodes.BeginNode;
+import com.oracle.graal.nodes.ConstantNode;
+import com.oracle.graal.nodes.IfNode;
+import com.oracle.graal.nodes.StructuredGraph;
 import com.oracle.graal.nodes.java.StoreIndexedNode;
 import com.oracle.graal.options.OptionValue;
 import com.oracle.graal.truffle.*;
+import com.oracle.graal.truffle.phases.InstrumentBranchesPhase;
 import com.oracle.truffle.api.TruffleRuntime;
 import com.oracle.truffle.api.TruffleRuntimeAccess;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
-import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.services.Services;
-import org.junit.Assert;
-import org.junit.Test;
 
-public class InstrumentBranchesTest extends GraalCompilerTest {
+public class InstrumentBranchesTest extends PartialEvaluationTest {
 
     @Test
     public void test1() throws Exception {
-        testHelper("test1", new TestNode1());
+        testHelper("test1", new TestNode1(), 1);
     }
 
     static class TestNode1 extends TestLanguageNode {
@@ -53,6 +59,7 @@ public class InstrumentBranchesTest extends GraalCompilerTest {
         public Object execute(VirtualFrame vFrame) {
             int x = 0;
             while (x < 5) {
+                x += 1;
                 if (x < 3) {
                     x += 1;
                 } else {
@@ -60,6 +67,31 @@ public class InstrumentBranchesTest extends GraalCompilerTest {
                 }
             }
             return testObject;
+        }
+    }
+
+    @Test
+    public void test2() throws Exception {
+        testHelper("test2", new TestNode2(), 2);
+    }
+
+    static class TestNode2 extends TestLanguageNode {
+        private Object testObject = new Object();
+
+        @Override
+        public Object execute(VirtualFrame vFrame) {
+            int x = 0;
+            while (x < 5) {
+                if (x < 3) {
+                    x += 1;
+                    if (x >= 1) {
+                        x += 2;
+                    }
+                } else {
+                    x += testObject.toString().length();
+                }
+            }
+            return x;
         }
     }
 
@@ -103,26 +135,30 @@ public class InstrumentBranchesTest extends GraalCompilerTest {
         StoreIndexedNode store = (StoreIndexedNode) beginNode.successors().first();
         Stamp stamp = store.inputs().filter(ConstantNode.class).first().stamp();
         Assert.assertTrue(stamp.javaType(getMetaAccess()).getElementalType().getJavaKind().equals(JavaKind.Boolean));
+        int index = ((JavaConstant) store.inputs().filter(ConstantNode.class).snapshot().get(1).getValue()).asInt();
+        Assert.assertEquals(index % 2 == 0, isTrue);
     }
 
     @SuppressWarnings("try")
-    private void testHelper(String name, TestLanguageNode testNode) throws Exception {
+    private void testHelper(String name, TestLanguageNode testNode, int expectedCount) throws Exception {
         RootNode rootNode = new TestRootNode(name, testNode);
         try (Debug.Scope s = Debug.scope("InstrumentBranchesTest");
-             OptionValue.OverrideScope o1 = OptionValue.override(TruffleCompilerOptions.InstrumentBranches, true);
-             OptionValue.OverrideScope o2 = OptionValue.override(TruffleCompilerOptions.InstrumentBranchesFilter, ".*callRoot.*")
-        ) {
+                        OptionValue.OverrideScope o1 = OptionValue.override(TruffleCompilerOptions.TruffleInstrumentBranches, true);
+                        OptionValue.OverrideScope o2 = OptionValue.override(TruffleCompilerOptions.TruffleInstrumentBranchesFilter, ".*callRoot.*")) {
             TruffleRuntime runtime = Services.loadSingle(TruffleRuntimeAccess.class, true).getRuntime();
             TruffleCompiler compiler = DefaultTruffleCompiler.create((GraalTruffleRuntime) runtime);
             final OptimizedCallTarget callTarget = (OptimizedCallTarget) runtime.createCallTarget(rootNode);
             StructuredGraph graph = compiler.getPartialEvaluator().createGraph(callTarget, StructuredGraph.AllowAssumptions.YES);
 
+            int instrumentCount = 0;
             for (IfNode node : graph.getNodes().filter(IfNode.class)) {
-                if (node.predecessor() instanceof InfopointNode) {
+                if (node.getNodeContext(InstrumentBranchesPhase.SourceLocation.class) != null) {
                     checkInstrumented(node.trueSuccessor(), true);
                     checkInstrumented(node.falseSuccessor(), false);
+                    instrumentCount++;
                 }
             }
+            Assert.assertEquals(expectedCount, instrumentCount);
         } catch (Throwable e) {
             Debug.handle(e);
         }

@@ -47,8 +47,8 @@ import com.oracle.graal.phases.tiers.HighTierContext;
 
 public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
 
-    public static final Pattern METHOD_REGEX_FILTER = Pattern.compile(InstrumentBranchesFilter.getValue());
-    public static final int TABLE_SIZE = InstrumentBranchesCount.getValue();
+    public static final Pattern METHOD_REGEX_FILTER = Pattern.compile(TruffleInstrumentBranchesFilter.getValue());
+    public static final int TABLE_SIZE = TruffleInstrumentBranchesCount.getValue();
     public static final boolean[] TABLE = new boolean[TABLE_SIZE];
 
     public static class BranchInstrumentation {
@@ -110,7 +110,7 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
                 public void run() {
-                    if (InstrumentBranches.getValue()) {
+                    if (TruffleInstrumentBranches.getValue()) {
                         System.out.println("Branch execution profile");
                         System.out.println("========================");
                         for (Map.Entry<String, Point> entry : pointMap.entrySet()) {
@@ -208,5 +208,4 @@ public class InstrumentBranchesPhase extends BasePhase<HighTierContext> {
             }
         }
     }
-
 }
