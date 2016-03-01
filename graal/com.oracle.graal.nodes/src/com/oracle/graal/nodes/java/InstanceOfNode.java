@@ -145,7 +145,7 @@ public class InstanceOfNode extends UnaryOpLogicNode implements Lowerable, Virtu
                 return LogicConstantNode.contradiction();
             } else {
                 boolean superType = inputType.isAssignableFrom(type.getType());
-                if (!superType && (type.isExactType() || (!isInterfaceOrArrayOfInterface(inputType) && !isInterfaceOrArrayOfInterface(type.getType())))) {
+                if (!superType && (type.isExact() || (!isInterfaceOrArrayOfInterface(inputType) && !isInterfaceOrArrayOfInterface(type.getType())))) {
                     return LogicConstantNode.contradiction();
                 }
                 // since the subtype comparison was only performed on a declared type we don't
@@ -153,7 +153,7 @@ public class InstanceOfNode extends UnaryOpLogicNode implements Lowerable, Virtu
             }
         }
 
-        if (type.isExactType() && nonNull) {
+        if (type.isExact() && nonNull) {
             return TypeCheckNode.create(type.getType(), object);
         }
         return null;

@@ -1,6 +1,7 @@
 package com.oracle.graal.compiler.common.type;
 
 import jdk.vm.ci.meta.Assumptions;
+import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 public final class CheckedJavaType {
@@ -27,11 +28,26 @@ public final class CheckedJavaType {
         return new CheckedJavaType(exactType, true);
     }
 
+    /**
+     * Returns the underlying {@link ResolvedJavaType} object.
+     */
     public ResolvedJavaType getType() {
         return type;
     }
 
-    public boolean isExactType() {
+    /**
+     * Returns the name of this type in internal form.
+     *
+     * See {@link JavaType#getName()}.
+     */
+    public String getName() {
+        return getType().getName();
+    }
+
+    /**
+     * Returns {@code true} if and only if this type is the only leaf type.
+     */
+    public boolean isExact() {
         return exactType;
     }
 

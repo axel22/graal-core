@@ -55,12 +55,12 @@ import com.oracle.graal.nodes.StructuredGraph.AllowAssumptions;
 import com.oracle.graal.nodes.ValueNode;
 import com.oracle.graal.nodes.calc.FloatingNode;
 import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration;
+import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderContext;
 import com.oracle.graal.nodes.graphbuilderconf.InlineInvokePlugin;
 import com.oracle.graal.nodes.graphbuilderconf.InvocationPlugins;
 import com.oracle.graal.nodes.graphbuilderconf.LoopExplosionPlugin;
 import com.oracle.graal.nodes.graphbuilderconf.ParameterPlugin;
-import com.oracle.graal.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import com.oracle.graal.nodes.java.CheckCastNode;
 import com.oracle.graal.nodes.java.InstanceOfNode;
 import com.oracle.graal.nodes.java.MethodCallTargetNode;
@@ -446,10 +446,10 @@ public class PartialEvaluator {
         HashMap<String, ArrayList<ValueNode>> groupedByType;
         groupedByType = new HashMap<>();
         for (CheckCastNode cast : graph.getNodes().filter(CheckCastNode.class)) {
-            if (!cast.type().isExactType()) {
+            if (!cast.type().isExact()) {
                 warnings.add(cast);
-                groupedByType.putIfAbsent(cast.type().getType().getName(), new ArrayList<>());
-                groupedByType.get(cast.type().getType().getName()).add(cast);
+                groupedByType.putIfAbsent(cast.type().getName(), new ArrayList<>());
+                groupedByType.get(cast.type().getName()).add(cast);
             }
         }
         for (Map.Entry<String, ArrayList<ValueNode>> entry : groupedByType.entrySet()) {
@@ -458,10 +458,10 @@ public class PartialEvaluator {
 
         groupedByType = new HashMap<>();
         for (InstanceOfNode instanceOf : graph.getNodes().filter(InstanceOfNode.class)) {
-            if (!instanceOf.type().isExactType()) {
+            if (!instanceOf.type().isExact()) {
                 warnings.add(instanceOf);
-                groupedByType.putIfAbsent(instanceOf.type().getType().getName(), new ArrayList<>());
-                groupedByType.get(instanceOf.type().getType().getName()).add(instanceOf);
+                groupedByType.putIfAbsent(instanceOf.type().getName(), new ArrayList<>());
+                groupedByType.get(instanceOf.type().getName()).add(instanceOf);
             }
         }
         for (Map.Entry<String, ArrayList<ValueNode>> entry : groupedByType.entrySet()) {

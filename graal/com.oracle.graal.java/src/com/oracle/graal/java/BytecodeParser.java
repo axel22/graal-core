@@ -2929,7 +2929,7 @@ public class BytecodeParser implements GraphBuilderContext {
     }
 
     private JavaTypeProfile getProfileForTypeCheck(CheckedJavaType type) {
-        if (parsingIntrinsic() || profilingInfo == null || !optimisticOpts.useTypeCheckHints() || type.isExactType()) {
+        if (parsingIntrinsic() || profilingInfo == null || !optimisticOpts.useTypeCheckHints() || type.isExact()) {
             return null;
         } else {
             return profilingInfo.getTypeProfile(bci());
