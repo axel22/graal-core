@@ -23,7 +23,6 @@
 package com.oracle.graal.nodes.java;
 
 import com.oracle.graal.compiler.common.type.CheckedJavaType;
-import com.oracle.graal.graph.Graph;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.spi.Canonicalizable;
 import com.oracle.graal.graph.spi.CanonicalizerTool;
