@@ -896,7 +896,7 @@ public class ConditionalEliminationPhase extends Phase {
             for (Node n : value.usages()) {
                 if (n instanceof InstanceOfNode) {
                     InstanceOfNode instanceOfNode = (InstanceOfNode) n;
-                    if (instanceOfNode.type().equals(type) && state.trueConditions.containsKey(instanceOfNode)) {
+                    if (instanceOfNode.type().getType().equals(type) && state.trueConditions.containsKey(instanceOfNode)) {
                         GuardingNode v = state.trueConditions.get(instanceOfNode);
                         if (v != null) {
                             return v;

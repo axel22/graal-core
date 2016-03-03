@@ -22,18 +22,7 @@
  */
 package com.oracle.graal.nodes.java;
 
-import static com.oracle.graal.nodes.extended.BranchProbabilityNode.NOT_FREQUENT_PROBABILITY;
-import static jdk.vm.ci.meta.DeoptimizationAction.InvalidateReprofile;
-import static jdk.vm.ci.meta.DeoptimizationReason.ArrayStoreException;
-import static jdk.vm.ci.meta.DeoptimizationReason.ClassCastException;
-import static jdk.vm.ci.meta.DeoptimizationReason.UnreachedCode;
-
 import com.oracle.graal.compiler.common.type.CheckedJavaType;
-import jdk.vm.ci.meta.JavaConstant;
-import jdk.vm.ci.meta.JavaTypeProfile;
-import jdk.vm.ci.meta.ResolvedJavaType;
-import jdk.vm.ci.meta.TriState;
-
 import com.oracle.graal.compiler.common.type.ObjectStamp;
 import com.oracle.graal.compiler.common.type.Stamp;
 import com.oracle.graal.compiler.common.type.StampFactory;
@@ -58,6 +47,16 @@ import com.oracle.graal.nodes.spi.ValueProxy;
 import com.oracle.graal.nodes.spi.Virtualizable;
 import com.oracle.graal.nodes.spi.VirtualizerTool;
 import com.oracle.graal.nodes.type.StampTool;
+import jdk.vm.ci.meta.JavaConstant;
+import jdk.vm.ci.meta.JavaTypeProfile;
+import jdk.vm.ci.meta.ResolvedJavaType;
+import jdk.vm.ci.meta.TriState;
+
+import static com.oracle.graal.nodes.extended.BranchProbabilityNode.NOT_FREQUENT_PROBABILITY;
+import static jdk.vm.ci.meta.DeoptimizationAction.InvalidateReprofile;
+import static jdk.vm.ci.meta.DeoptimizationReason.ArrayStoreException;
+import static jdk.vm.ci.meta.DeoptimizationReason.ClassCastException;
+import static jdk.vm.ci.meta.DeoptimizationReason.UnreachedCode;
 
 /**
  * Implements a type check against a compile-time known type.
@@ -81,7 +80,7 @@ public class CheckCastNode extends FixedWithNextNode implements Canonicalizable,
     }
 
     protected CheckCastNode(NodeClass<? extends CheckCastNode> c, CheckedJavaType type, ValueNode object, JavaTypeProfile profile, boolean forStoreCheck) {
-        super(c, StampFactory.declaredTrusted(type.getType()).improveWith(object.stamp()));
+        super(c, (type != null) ? StampFactory.declaredTrusted(type.getType()).improveWith(object.stamp()) : null);
         assert object.stamp() instanceof ObjectStamp : object;
         assert type != null;
         this.type = type;
